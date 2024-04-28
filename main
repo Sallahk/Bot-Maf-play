@@ -1,0 +1,183 @@
+import customtkinter as ctk
+import tkinter as tk
+import random
+
+class MafiaGame(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("Mafia Game")
+        self.geometry("700x700")
+
+        # Variables
+        self.num_players = tk.StringVar()
+        self.include_doctor = tk.BooleanVar(value=True)
+        self.mafia_count = tk.IntVar(value=0)
+        self.day_count = 0
+        self.roles = []
+        self.player_events = []
+        self.timer = None
+        self.timer_label = None
+
+        # Setup input, mafia count adjustment, and player list display
+        self.setup_input()
+        self.setup_mafia_count_adjustment()
+        self.setup_player_list()
+
+    def setup_input(self):
+        label = ctk.CTkLabel(self, text="Enter the number of players:")
+        label.pack(pady=20)
+
+        entry = ctk.CTkEntry(self, textvariable=self.num_players)
+        entry.pack()
+
+        doctor_checkbox = ctk.CTkCheckBox(self, text="Include Doctor", variable=self.include_doctor, onvalue=True, offvalue=False)
+        doctor_checkbox.pack(pady=10)
+
+        start_button = ctk.CTkButton(self, text="Start Game", command=self.start_game)
+        start_button.pack(pady=10)
+
+        restart_button = ctk.CTkButton(self, text="Restart Game", command=self.restart_game)
+        restart_button.pack(pady=10)
+
+    def setup_mafia_count_adjustment(self):
+        adjustment_frame = ctk.CTkFrame(self)
+        adjustment_frame.pack(pady=20)
+
+        mafia_label = ctk.CTkLabel(adjustment_frame, text="Mafia in Game:")
+        mafia_label.pack(side=tk.TOP, pady=5)
+
+        decrease_button = ctk.CTkButton(adjustment_frame, text="-", command=self.decrease_mafia)
+        decrease_button.pack(side=tk.LEFT, padx=10)
+
+        self.mafia_count_label = ctk.CTkLabel(adjustment_frame, textvariable=self.mafia_count)
+        self.mafia_count_label.pack(side=tk.LEFT, padx=10)
+
+        increase_button = ctk.CTkButton(adjustment_frame, text="+", command=self.increase_mafia)
+        increase_button.pack(side=tk.LEFT, padx=10)
+
+    def setup_player_list(self):
+        self.player_list_frame = ctk.CTkFrame(self)
+        self.player_list_frame.pack(pady=20, fill='both', expand=True)
+        self.player_list_label = ctk.CTkLabel(self.player_list_frame, text="")
+        self.player_list_label.pack()
+
+    def update_player_list(self):
+        display_text = "\n".join(f"Player {idx + 1}: {role} - {status}"
+                                 for idx, (role, status) in enumerate(self.player_events))
+        self.player_list_label.configure(text=display_text)
+
+    def start_game(self):
+        try:
+            num_players = int(self.num_players.get())
+            if num_players < 4:
+                ctk.CTkMessageBox.show_error("Error", "Need at least 4 players to start the game.")
+                return
+            self.roles = self.distribute_roles(num_players, self.include_doctor.get())
+            self.player_events = [(role, "Alive") for role in self.roles]
+            self.update_player_list()
+            self.start_speech_phase()
+        except ValueError:
+            ctk.CTkMessageBox.show_error("Error", "Please enter a valid number of players.")
+
+    def start_speech_phase(self):
+        speech_window = ctk.CTkToplevel(self)
+        speech_window.title("Speech and Voting")
+        speech_window.geometry("400x300")
+
+        self.timer_label = ctk.CTkLabel(speech_window, text="60", font=("Helvetica", 24))
+        self.timer_label.pack(pady=20)
+
+        start_button = ctk.CTkButton(speech_window, text="Start Speech", command=lambda: self.start_timer(60))
+        start_button.pack()
+
+        stop_button = ctk.CTkButton(speech_window, text="Stop Timer", command=self.stop_timer)
+        stop_button.pack()
+
+        reset_button = ctk.CTkButton(speech_window, text="Reset Timer", command=lambda: self.reset_timer(60))
+        reset_button.pack()
+
+        entry = ctk.CTkEntry(speech_window)
+        entry.pack()
+
+        vote_button = ctk.CTkButton(speech_window, text="Vote", command=lambda: self.setup_voting(entry.get(), speech_window))
+        vote_button.pack()
+
+        sleep_button = ctk.CTkButton(speech_window, text="The City Falls Asleep", command=lambda: [speech_window.destroy(), self.show_message("The city is falling asleep.\nEveryone is sleeping.")])
+        sleep_button.pack()
+
+    def restart_game(self):
+        self.num_players.set("")
+        self.player_events.clear()
+        self.update_player_list()
+
+    def distribute_roles(self, num_players, include_doctor):
+        num_mafia = self.mafia_count.get() if self.mafia_count.get() > 0 else num_players // 4
+        num_cop = 1
+        num_doctor = 1 if include_doctor else 0
+        num_peaceful = num_players - (num_mafia + num_cop + num_doctor)
+        
+        roles = ["peaceful"] * num_peaceful + ["mafia"] * num_mafia + ["cop"]
+        if num_players >= 10:
+            roles.append("Don of mafia")
+        if include_doctor:
+            roles.append("doctor")
+        
+        random.shuffle(roles)
+        return roles
+
+    def decrease_mafia(self):
+        if self.mafia_count.get() > 0:
+            self.mafia_count.set(self.mafia_count.get() - 1)
+
+    def increase_mafia(self):
+        self.mafia_count.set(self.mafia_count.get() + 1)
+
+    def start_timer(self, countdown_from):
+        self.stop_timer()
+        self.timer_countdown(countdown_from)
+
+    def stop_timer(self):
+        if self.timer:
+            self.after_cancel(self.timer)
+            self.timer = None
+
+    def reset_timer(self, countdown_from):
+        self.stop_timer()
+        self.timer_label.configure(text=str(countdown_from))
+        self.start_timer(countdown_from)
+
+    def timer_countdown(self, count):
+        self.timer_label.configure(text=str(count))
+        if count > 0:
+            if count <= 10:
+                self.timer_label.configure(fg='red')
+            else:
+                self.timer_label.configure(fg='black')
+            self.timer = self.after(1000, lambda: self.timer_countdown(count - 1))
+
+    def setup_voting(self, numbers, window):
+        numbers = numbers.split(',')
+        for number in numbers:
+            if number.strip().isdigit():
+                btn = ctk.CTkButton(window, text=number.strip(), command=lambda n=number: self.vote_player(n.strip(), window))
+                btn.pack()
+
+    def vote_player(self, number, window):
+        number = int(number) - 1  # Convert to index
+        if 0 <= number < len(self.player_events):
+            self.player_events[number] = (self.player_events[number][0], "Kicked out by voting")
+            self.update_player_list()
+            print(f"Voted out player {number + 1}")
+            window.destroy()
+
+    def show_message(self, message, callback=None):
+        messagebox = ctk.CTkToplevel(self)
+        messagebox.grab_set()
+        label = ctk.CTkLabel(messagebox, text=message)
+        label.pack(pady=20)
+        close_button = ctk.CTkButton(messagebox, text="Close", command=lambda: [messagebox.destroy(), (callback() if callback else None)])
+        close_button.pack(pady=10)
+
+if __name__ == "__main__":
+    app = MafiaGame()
+    app.mainloop()
